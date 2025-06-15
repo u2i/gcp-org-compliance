@@ -20,47 +20,33 @@ gcp-org-compliance/
 └── MIGRATION_PLAN.md  # Detailed migration strategy
 ```
 
-## 🚀 Quick Start
+## 🚀 Current Status
 
-### Prerequisites
-- Google Cloud Organization with billing enabled
-- `gcp-failsafe@yourdomain.com` user with Organization Admin role
-- Terraform >= 1.6
-- gcloud CLI authenticated
+### ✅ Infrastructure Deployed
+- **Bootstrap Project**: `u2i-bootstrap` with Terraform state management
+- **Remote State**: `gs://u2i-tfstate` bucket configured and working
+- **Folder Structure**: Three-tier compliance folders created
+  - `legacy-systems` (933345237861) - For existing projects with policy exceptions
+  - `migration-in-progress` (1003490002560) - Projects being remediated
+  - `compliant-systems` (914995929705) - Fully compliant projects
+- **Security Policies**: Organization-wide compliance rules with legacy exceptions
+- **Assessment Tools**: Project migration and compliance scoring scripts
 
-### 1. Bootstrap Infrastructure
+### 🎯 Ready for Project Migration
 
-```bash
-# Clone repository
-git clone https://github.com/u2i/gcp-org-compliance.git
-cd gcp-org-compliance
-
-# Deploy bootstrap project
-cd 0-bootstrap
-terraform init
-terraform apply
-
-# Configure remote state
-terraform init -migrate-state
-```
-
-### 2. Deploy Organization Structure
+The infrastructure is deployed and ready. Next steps:
 
 ```bash
-# Deploy compliance folders and policies
-cd ../1-organization  
-terraform init
-terraform apply
-```
+# 1. Move remaining projects to legacy folder (130+ projects identified)
+./scripts/move-projects-to-legacy.sh 933345237861
 
-### 3. Migrate Existing Projects
-
-```bash
-# Move projects to legacy folder (with policy exceptions)
-./scripts/move-projects-to-legacy.sh LEGACY_FOLDER_ID
-
-# Assess project compliance
+# 2. Assess project compliance (10-point scoring system)
 ./scripts/assess-project-compliance.sh PROJECT_ID
+
+# 3. Begin migration based on compliance scores
+# 80%+ compliant → move to compliant-systems folder
+# 60-79% compliant → move to migration-in-progress folder  
+# <60% compliant → remain in legacy folder for remediation
 ```
 
 ## 📊 Compliance Tiers
@@ -147,10 +133,11 @@ while read project; do ./scripts/assess-project-compliance.sh $project; done
 ### Success Metrics
 | Metric | Current | Target |
 |--------|---------|--------|
-| Projects in Legacy | 130+ | 0% |
+| Infrastructure Deployed | ✅ Complete | ✅ 100% |
+| Projects in Legacy | 5 moved, 125+ remaining | 130+ (100%) |
+| Compliance Assessment | Ready | 100% assessed |
 | Policy Compliance | Variable | 100% |
-| Audit Coverage | Partial | 100% |
-| Zero-Standing-Privilege | ✅ | 100% |
+| Zero-Standing-Privilege | ✅ Implemented | ✅ 100% |
 
 ### Rollback Procedures
 - Move projects back to legacy folder if issues arise
@@ -210,16 +197,18 @@ gcloud projects add-iam-policy-binding PROJECT_ID \
 ## 🎯 Roadmap
 
 ### Phase 1: Foundation (✅ Complete)
-- [x] Bootstrap infrastructure
-- [x] Folder structure
-- [x] Migration tooling
-- [x] Assessment framework
+- [x] Bootstrap infrastructure (`u2i-bootstrap` project)
+- [x] Folder structure (legacy/migration/compliant folders)
+- [x] Migration tooling (move-projects and assess-compliance scripts)
+- [x] Assessment framework (10-point compliance scoring)
+- [x] Remote state management (`gs://u2i-tfstate`)
+- [x] Security policies with legacy exceptions
 
-### Phase 2: Assessment (🔄 In Progress)
-- [ ] Bulk project assessment
-- [ ] Compliance scoring
-- [ ] Migration prioritization
-- [ ] Remediation planning
+### Phase 2: Assessment (🎯 Ready to Start)
+- [ ] Move remaining 130+ projects to legacy folder
+- [ ] Bulk project assessment and compliance scoring
+- [ ] Migration prioritization (80%+ compliance first)
+- [ ] Remediation planning for medium-compliance projects
 
 ### Phase 3: Migration (📅 Planned)
 - [ ] Quick wins (80%+ compliance)
