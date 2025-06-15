@@ -16,7 +16,7 @@ provider "google" {
 
 # Create folder structure for gradual migration
 module "org_structure" {
-  source = "github.com/u2i/terraform-google-compliance-modules//modules/organization-structure?ref=v1.0.19"
+  source = "github.com/u2i/terraform-google-compliance-modules//modules/organization-structure?ref=v1.0.22"
   
   org_id = var.org_id
   
@@ -49,7 +49,7 @@ module "org_structure" {
 
 # Security policies with exceptions for legacy
 module "security_baseline" {
-  source = "github.com/u2i/terraform-google-compliance-modules//modules/security-baseline?ref=v1.0.19"
+  source = "github.com/u2i/terraform-google-compliance-modules//modules/security-baseline?ref=v1.0.22"
   
   parent_id  = var.org_id
   policy_for = "organization"
@@ -102,7 +102,7 @@ module "security_baseline" {
 
 # Audit logging setup
 module "audit_logging" {
-  source = "github.com/u2i/terraform-google-compliance-modules//modules/audit-logging?ref=v1.0.19"
+  source = "github.com/u2i/terraform-google-compliance-modules//modules/audit-logging?ref=v1.0.22"
   
   org_id          = var.org_id
   billing_account = var.billing_account
