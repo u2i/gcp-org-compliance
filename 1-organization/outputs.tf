@@ -20,3 +20,29 @@ output "migration_instructions" {
     4. Move projects through migration folder as they're updated
   EOT
 }
+
+# GitOps outputs
+output "workload_identity_provider" {
+  value       = google_iam_workload_identity_pool_provider.github.name
+  description = "Workload Identity Provider for GitHub Actions"
+}
+
+output "terraform_organization_sa" {
+  value       = google_service_account.terraform_organization.email
+  description = "Organization Terraform service account (read-only + PAM elevation)"
+}
+
+output "terraform_security_sa" {
+  value       = google_service_account.terraform_security.email
+  description = "Security Terraform service account (read-only + PAM elevation)"
+}
+
+output "github_actions_setup" {
+  value = {
+    workload_identity_provider = google_iam_workload_identity_pool_provider.github.name
+    organization_sa           = google_service_account.terraform_organization.email
+    security_sa              = google_service_account.terraform_security.email
+    repository               = "u2i/gcp-org-compliance"
+  }
+  description = "GitHub Actions configuration values"
+}

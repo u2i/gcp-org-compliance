@@ -54,3 +54,9 @@ variable "approvers_group" {
   description = "Google group for PAM approvers"
   type        = string
 }
+
+variable "tfstate_bucket" {
+  description = "Terraform state bucket name"
+  type        = string
+  default     = "u2i-tfstate"
+}

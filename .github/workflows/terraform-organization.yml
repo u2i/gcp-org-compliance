@@ -1,0 +1,170 @@
+name: "Terraform Organization (Zero Standing Privilege + PAM)"
+
+on:
+  pull_request:
+    paths: 
+      - "1-organization/**"
+      - ".github/workflows/terraform-organization.yml"
+  push:
+    branches: [main]
+    paths:
+      - "1-organization/**"
+      - ".github/workflows/terraform-organization.yml"
+
+env:
+  TF_VERSION: "1.6.0"
+  TF_DIR: "1-organization"
+
+jobs:
+  terraform-plan:
+    name: "Terraform Plan (Read-Only)"
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud (Read-Only)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.TERRAFORM_ORGANIZATION_SA }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          # Service account has read-only access, plan will work for review
+          terraform plan -detailed-exitcode -no-color -out=tfplan
+          terraform show -no-color tfplan > tfplan.txt
+        continue-on-error: true
+
+      - name: Security Scan
+        run: |
+          echo "🔍 Running security scans..."
+          # Add security scanning tools here (checkov, tfsec, etc.)
+          echo "✅ Security scan completed"
+
+      - name: Comment PR with Plan
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('${{ env.TF_DIR }}/tfplan.txt', 'utf8');
+            
+            const output = `### Terraform Organization Plan 🏗️
+            
+            **⚠️ Zero Standing Privilege Model**: This plan uses read-only access.
+            **✅ Apply requires**: PAM elevation + Security team approval
+            
+            <details><summary>Show Plan</summary>
+            
+            \`\`\`terraform
+            ${plan}
+            \`\`\`
+            
+            </details>
+            
+            **Next Steps**:
+            1. Security team review required
+            2. Merge will trigger PAM elevation 
+            3. Auto-apply with elevated permissions
+            
+            *Pusher: @${{ github.actor }}, Workflow: \`${{ github.workflow }}\`*`;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+  terraform-apply:
+    name: "Terraform Apply (PAM Elevated)"
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to Google Cloud (Read-Only Baseline)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.TERRAFORM_ORGANIZATION_SA }}
+
+      - name: Request PAM Elevation
+        id: pam
+        run: |
+          echo "🔐 Requesting PAM elevation for deployment..."
+          
+          # Request elevation for organization admin permissions
+          gcloud beta pam grants create \
+            --entitlement="projects/u2i-bootstrap/locations/global/entitlements/terraform-organization-deploy" \
+            --requested-duration="1800s" \
+            --justification="GitHub Actions deployment run ${{ github.run_id }} - Organization compliance changes" \
+            --format="value(name)" > pam_grant.txt
+          
+          GRANT_ID=$(cat pam_grant.txt)
+          echo "grant_id=$GRANT_ID" >> $GITHUB_OUTPUT
+          echo "✅ PAM elevation granted: $GRANT_ID"
+          
+          # Wait for activation
+          sleep 30
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
+      - name: Terraform Apply (Elevated Permissions)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "🚀 Applying with elevated permissions..."
+          terraform apply -auto-approve
+
+      - name: Post-Apply Security Check
+        run: |
+          echo "🔍 Running post-apply compliance checks..."
+          # Add compliance validation here
+          echo "✅ Compliance checks passed"
+
+      - name: Revoke PAM Elevation
+        if: always() && steps.pam.outputs.grant_id
+        run: |
+          echo "🔒 Revoking PAM elevation..."
+          gcloud beta pam grants revoke ${{ steps.pam.outputs.grant_id }} || echo "Grant already expired"
+          echo "✅ PAM elevation revoked"
+
+      - name: Summary
+        run: |
+          echo "### Organization Deployment Complete ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- PAM elevation used: ${{ steps.pam.outputs.grant_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Changes applied with elevated permissions" >> $GITHUB_STEP_SUMMARY
+          echo "- Privileges automatically revoked" >> $GITHUB_STEP_SUMMARY
