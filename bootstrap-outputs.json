@@ -1,0 +1,17 @@
+{
+  "bootstrap_project_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "u2i-bootstrap"
+  },
+  "terraform_sa_email": {
+    "sensitive": false,
+    "type": "string",
+    "value": "terraform-bootstrap@u2i-bootstrap.iam.gserviceaccount.com"
+  },
+  "tfstate_bucket": {
+    "sensitive": false,
+    "type": "string",
+    "value": "u2i-tfstate"
+  }
+}
