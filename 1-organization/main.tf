@@ -12,14 +12,17 @@ provider "google" {
   # Using failsafe account directly for initial setup
   # Will switch to service account impersonation after setup
   # impersonate_service_account = var.terraform_sa_email
+
+  user_project_override = true
+  billing_project       = "u2i-bootstrap"
 }
 
 # Create folder structure for gradual migration
 module "org_structure" {
-  source = "github.com/u2i/terraform-google-compliance-modules//modules/organization-structure?ref=v1.0.22"
-  
+  source = "github.com/u2i/terraform-google-compliance-modules//modules/organization-structure?ref=v1.4.0"
+
   org_id = var.org_id
-  
+
   folder_structure = {
     # Existing projects go here initially
     "legacy-systems" = {
@@ -34,7 +37,7 @@ module "org_structure" {
       subfolders = ["production", "staging", "development", "shared-services"]
     }
   }
-  
+
   essential_contacts = {
     security = {
       email                   = var.security_email
@@ -49,82 +52,116 @@ module "org_structure" {
 
 # Security policies with exceptions for legacy
 module "security_baseline" {
-  source = "github.com/u2i/terraform-google-compliance-modules//modules/security-baseline?ref=v1.0.22"
-  
+  source = "github.com/u2i/terraform-google-compliance-modules//modules/security-baseline?ref=v1.5.0"
+
   parent_id  = var.org_id
   policy_for = "organization"
-  
-  # Enforce critical policies immediately
+
+  # Gradual compliance rollout: legacy -> migration -> compliant
   enforce_policies = {
-    # Security critical - enforce now
+    # Security critical - enforce organization-wide with legacy exceptions
     disable_audit_logging_exemption = true
     uniform_bucket_level_access     = true
     public_access_prevention        = true
     require_ssl_sql                 = true
     restrict_public_sql             = true
     disable_project_deletion        = true
-    
-    # Enforce with exceptions for legacy
-    disable_sa_key_creation      = true
-    require_shielded_vm          = true
-    disable_serial_port_access   = true
-    skip_default_network         = true
-    vm_external_ip_access        = true
-    require_cmek_encryption      = true
-    
-    # Enable gradually
-    require_os_login             = false  # Requires OS Login setup
-    gke_enable_autopilot        = false  # For existing GKE clusters
-    binary_authorization        = false  # Requires Binary Auth setup
+
+    # Enforce with exceptions for legacy and partial for migration
+    disable_sa_key_creation    = true
+    require_shielded_vm        = true
+    disable_serial_port_access = true
+    skip_default_network       = true
+    vm_external_ip_access      = true
+    require_cmek_encryption    = true
+
+    # Advanced policies - compliant systems only (migration gets exceptions)
+    require_os_login     = true  # OS Login required for compliant systems
+    gke_enable_autopilot = true  # Autopilot required for compliant systems
+    binary_authorization = true  # Binary auth required for compliant systems
   }
-  
+
   allowed_domains   = var.allowed_domains
   allowed_locations = var.allowed_locations
   
-  # Legacy folder gets exceptions
+  # Pass folder IDs to the module
+  folder_ids = module.org_structure.folder_ids
+  
+  
+  # Configure list policies
+  policy_configs = {
+    allowed_policy_member_domains = {
+      allowed_values = var.allowed_domains
+    }
+  }
+
+  # Gradual compliance path through folder exceptions
   policy_exceptions = {
     folders = {
-      (module.org_structure.folder_ids["legacy-systems"]) = [
+      # Legacy systems - maximum exceptions for compatibility
+      "legacy-systems" = [
+        # IAM & Security
         "disable_sa_key_creation",
+        "disable_audit_logging_exemption",
+        # Compute & Network
         "require_shielded_vm",
+        "disable_serial_port_access",
         "skip_default_network",
         "vm_external_ip_access",
-        "require_cmek_encryption"
+        "require_os_login",
+        # Storage & Encryption
+        "uniform_bucket_level_access",
+        "public_access_prevention", 
+        "require_cmek_encryption",
+        # Database
+        "require_ssl_sql",
+        "restrict_public_sql",
+        # Container & Advanced
+        "gke_enable_autopilot",
+        "binary_authorization"
       ]
-      # Partial exceptions for migration folder
-      (module.org_structure.folder_ids["migration-in-progress"]) = [
-        "disable_sa_key_creation",
-        "vm_external_ip_access"
+      
+      # Migration systems - partial exceptions for gradual compliance
+      "migration-in-progress" = [
+        # Essential exceptions for migration
+        "disable_sa_key_creation",    # Can't migrate all SAs immediately
+        "vm_external_ip_access",      # May need external access during migration
+        "require_os_login",           # OS Login setup takes time
+        "require_cmek_encryption",    # CMEK migration is complex
+        "gke_enable_autopilot",       # Existing GKE clusters need time
+        "binary_authorization"        # Binary auth requires setup
       ]
+      
+      # Compliant systems folder gets NO exceptions - full enforcement
     }
   }
 }
 
 # Audit logging setup
 module "audit_logging" {
-  source = "github.com/u2i/terraform-google-compliance-modules//modules/audit-logging?ref=v1.0.22"
-  
+  source = "github.com/u2i/terraform-google-compliance-modules//modules/audit-logging?ref=v1.4.0"
+
   org_id          = var.org_id
   billing_account = var.billing_account
   company_name    = var.company_name
-  
+
   create_logging_project = true
   logging_project_name   = "${var.project_prefix}-security-logs"
-  
+
   log_sinks = {
     # Immediate compliance requirement
     audit_logs = {
       destination_type = "logging_bucket"
-      retention_days   = 365  # Increase to 2555 for full compliance
-      location        = "us"
+      retention_days   = 365 # Increase to 2555 for full compliance
+      location         = "us"
     }
-    
+
     # Security monitoring
     security_events = {
       destination_type        = "bigquery"
-      retention_days         = 90
+      retention_days          = 90
       enable_real_time_alerts = true
-      filter = <<-EOT
+      filter                  = <<-EOT
         severity >= "WARNING"
         AND (
           protoPayload.methodName:"SetIamPolicy"
@@ -134,8 +171,8 @@ module "audit_logging" {
       EOT
     }
   }
-  
-  enable_cmek = false  # Enable after KMS setup
+
+  enable_cmek = false # Enable after KMS setup
 }
 
 # Configure group permissions (simplified for small org)
@@ -148,7 +185,7 @@ resource "google_organization_iam_member" "developers_org_permissions" {
     "roles/monitoring.viewer",
     "roles/billing.viewer",
   ])
-  
+
   org_id = var.org_id
   role   = each.key
   member = "group:${var.developers_group}"
@@ -161,7 +198,7 @@ resource "google_folder_iam_member" "developers_folder_permissions" {
     "migration-edit" = { folder = module.org_structure.folder_ids["migration-in-progress"], role = "roles/editor" }
     "compliant-view" = { folder = module.org_structure.folder_ids["compliant-systems"], role = "roles/viewer" }
   }
-  
+
   folder = each.value.folder
   role   = each.value.role
   member = "group:${var.developers_group}"
