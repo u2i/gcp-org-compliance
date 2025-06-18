@@ -1,0 +1,15 @@
+# Example Terraform variables for shared GKE infrastructure
+# Copy this to terraform.tfvars and fill in your values
+
+# Basic configuration
+primary_region = "europe-west1"
+organization_project_id = "u2i-gke-nonprod"
+
+# Slack approval system configuration
+# Get this from: https://api.slack.com/apps/YOUR_APP_ID/general
+slack_signing_secret = "your_slack_app_signing_secret_here"
+
+# GitHub integration
+# Create a personal access token with 'actions:write' scope  
+# https://github.com/settings/tokens
+github_approval_token = "github_pat_your_token_here"
