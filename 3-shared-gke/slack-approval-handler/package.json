@@ -8,9 +8,9 @@
     "deploy": "gcloud functions deploy slack-approval-handler --runtime nodejs18 --trigger-http --allow-unauthenticated --source . --entry-point handleSlackInteraction"
   },
   "dependencies": {
-    "@octokit/rest": "^20.0.2",
     "@google-cloud/secret-manager": "^5.0.0",
-    "crypto": "^1.0.1"
+    "@google-cloud/storage": "^7.0.0",
+    "@octokit/rest": "^20.0.2"
   },
   "engines": {
     "node": ">=18"

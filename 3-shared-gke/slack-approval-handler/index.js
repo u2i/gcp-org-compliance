@@ -1,6 +1,7 @@
 const crypto = require('crypto');
-const { Octokit } = require('@octokit/rest');
 const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
+const { Storage } = require('@google-cloud/storage');
+const { Octokit } = require('@octokit/rest');
 
 const secretManager = new SecretManagerServiceClient();
 
@@ -97,31 +98,59 @@ async function createAuditLog(action, projectName, runId, user, timestamp) {
 }
 
 /**
- * Update GitHub workflow status
+ * Update workflow approval status - both GCS and GitHub
  */
 async function updateWorkflowStatus(projectConfig, runId, approved, approver) {
-  const githubToken = await getSecret('github-approval-token');
-  const octokit = new Octokit({ 
-    auth: githubToken 
-  });
+  const storage = new Storage();
+  const bucketName = process.env.APPROVAL_BUCKET;
   
   try {
-    // Create a workflow dispatch to signal approval
-    await octokit.rest.actions.createWorkflowDispatch({
-      owner: projectConfig.owner,
-      repo: projectConfig.repo,
-      workflow_id: 'terraform-apply-approval.yml', // We'll create this
-      ref: 'main',
-      inputs: {
-        original_run_id: runId,
-        approved: approved.toString(),
-        approver: approver.name,
-        approver_id: approver.id,
-        timestamp: new Date().toISOString()
-      }
-    });
+    // 1. Write approval decision to GCS bucket (for audit trail)
+    const approvalFile = storage.bucket(bucketName).file(`approvals/${runId}`);
+    const metadataFile = storage.bucket(bucketName).file(`approvals/${runId}.json`);
     
-    console.log(`Successfully signaled ${approved ? 'approval' : 'rejection'} for run ${runId}`);
+    // Write simple approval status
+    await approvalFile.save(approved.toString());
+    
+    // Write detailed metadata
+    const metadata = {
+      runId: runId,
+      approved: approved,
+      approver: approver.name,
+      approver_id: approver.id,
+      timestamp: new Date().toISOString(),
+      project: projectConfig.repo,
+      description: projectConfig.description
+    };
+    
+    await metadataFile.save(JSON.stringify(metadata, null, 2));
+    
+    console.log(`Successfully wrote ${approved ? 'approval' : 'rejection'} for run ${runId} to GCS`);
+    
+    // 2. Try to send repository dispatch event to GitHub (optional)
+    try {
+      const githubToken = await getSecret('github-approval-token');
+      const octokit = new Octokit({ auth: githubToken });
+      
+      await octokit.rest.repos.createDispatchEvent({
+        owner: projectConfig.owner,
+        repo: projectConfig.repo,
+        event_type: 'slack-approval-received',
+        client_payload: {
+          run_id: runId,
+          approved: approved,
+          approver: approver.name,
+          approver_id: approver.id,
+          timestamp: new Date().toISOString()
+        }
+      });
+      
+      console.log(`Successfully sent repository dispatch event for ${projectConfig.repo}`);
+    } catch (githubError) {
+      console.error('Failed to send GitHub dispatch (non-fatal):', githubError.message);
+      // Continue - approval is already written to GCS
+    }
+    
     return true;
   } catch (error) {
     console.error('Failed to update workflow status:', error);
@@ -139,7 +168,17 @@ exports.handleSlackInteraction = async (req, res) => {
     // Verify this is actually from Slack
     const timestamp = req.headers['x-slack-request-timestamp'];
     const signature = req.headers['x-slack-signature'];
-    const body = req.body;
+    
+    // Get the raw body string - this is crucial for signature verification
+    let rawBody;
+    if (typeof req.body === 'string') {
+      rawBody = req.body;
+    } else if (req.rawBody) {
+      rawBody = req.rawBody.toString('utf8');
+    } else {
+      // If body is already parsed, we need to reconstruct it
+      rawBody = Object.keys(req.body).map(key => `${key}=${encodeURIComponent(req.body[key])}`).join('&');
+    }
     
     // Check for replay attacks (timestamp more than 5 minutes old)
     const currentTime = Math.floor(Date.now() / 1000);
@@ -150,13 +189,13 @@ exports.handleSlackInteraction = async (req, res) => {
     
     // Get Slack signing secret and verify signature
     const slackSigningSecret = await getSecret('slack-signing-secret');
-    if (!verifySlackSignature(body, timestamp, signature, slackSigningSecret)) {
+    if (!verifySlackSignature(rawBody, timestamp, signature, slackSigningSecret)) {
       console.error('Invalid Slack signature');
       return res.status(401).send('Unauthorized - Invalid signature');
     }
     
     // Parse Slack payload
-    const payload = JSON.parse(decodeURIComponent(body.split('payload=')[1]));
+    const payload = JSON.parse(decodeURIComponent(rawBody.split('payload=')[1]));
     console.log('Parsed payload:', JSON.stringify(payload, null, 2));
     
     const action = payload.actions[0];

@@ -5,6 +5,10 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 5.0"
     }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = ">= 5.0"
+    }
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = ">= 2.20"
@@ -37,6 +41,11 @@ data "terraform_remote_state" "organization" {
 
 # Configure the Google Provider
 provider "google" {
+  user_project_override = true
+  billing_project       = data.terraform_remote_state.shared_gke.outputs.projects_created["u2i-gke-nonprod"].project_id
+}
+
+provider "google-beta" {
   user_project_override = true
   billing_project       = data.terraform_remote_state.shared_gke.outputs.projects_created["u2i-gke-nonprod"].project_id
 }

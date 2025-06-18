@@ -158,9 +158,8 @@ resource "kubernetes_network_policy" "webapp_isolation_nonprod" {
       }
     }
 
-    # Allow egress to external services
+    # Allow egress to external services (Internet)
     egress {
-      to {}
       ports {
         port     = "443"
         protocol = "TCP"
@@ -168,7 +167,6 @@ resource "kubernetes_network_policy" "webapp_isolation_nonprod" {
     }
 
     egress {
-      to {}
       ports {
         port     = "80"
         protocol = "TCP"
@@ -236,9 +234,8 @@ resource "kubernetes_network_policy" "webapp_isolation_prod" {
       }
     }
 
-    # Allow egress to external services
+    # Allow egress to external services (Internet)
     egress {
-      to {}
       ports {
         port     = "443"
         protocol = "TCP"
@@ -246,7 +243,6 @@ resource "kubernetes_network_policy" "webapp_isolation_prod" {
     }
 
     egress {
-      to {}
       ports {
         port     = "80"
         protocol = "TCP"
