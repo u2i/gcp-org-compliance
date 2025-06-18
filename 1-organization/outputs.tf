@@ -47,3 +47,20 @@ output "github_actions_setup" {
   }
   description = "GitHub Actions configuration values"
 }
+
+output "dns_configuration" {
+  description = "DNS configuration for u2i.dev domain"
+  value = {
+    zone_name    = google_dns_managed_zone.u2i_dev.name
+    dns_name     = google_dns_managed_zone.u2i_dev.dns_name
+    name_servers = google_dns_managed_zone.u2i_dev.name_servers
+    project_id   = google_project.dns_project.project_id
+    registrar_setup = <<-EOT
+      Configure these nameservers at your domain registrar:
+      ${join("\n      ", google_dns_managed_zone.u2i_dev.name_servers)}
+      
+      Note: Application-specific DNS records are managed in their respective projects.
+      This ensures proper access control and allows teams to manage their own DNS.
+    EOT
+  }
+}
