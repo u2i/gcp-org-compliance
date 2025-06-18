@@ -37,17 +37,12 @@ output "terraform_security_sa" {
   description = "Security Terraform service account (read-only + PAM elevation)"
 }
 
-output "terraform_webapp_team_sa" {
-  value       = google_service_account.terraform_webapp_team.email
-  description = "WebApp team Terraform service account (read-only + scoped state access)"
-}
 
 output "github_actions_setup" {
   value = {
     workload_identity_provider = google_iam_workload_identity_pool_provider.github.name
     organization_sa           = google_service_account.terraform_organization.email
     security_sa              = google_service_account.terraform_security.email
-    webapp_team_sa           = google_service_account.terraform_webapp_team.email
     repository               = "u2i/gcp-org-compliance"
   }
   description = "GitHub Actions configuration values"

@@ -54,13 +54,6 @@ resource "google_service_account" "terraform_security" {
   project      = data.terraform_remote_state.bootstrap.outputs.bootstrap_project_id
 }
 
-# Tenant-specific service accounts for isolated state access
-resource "google_service_account" "terraform_webapp_team" {
-  account_id   = "terraform-webapp-team"
-  display_name = "Terraform WebApp Team SA (Zero Standing Privilege)"
-  description  = "WebApp team tenant deployments - read-only + scoped state access"
-  project      = data.terraform_remote_state.bootstrap.outputs.bootstrap_project_id
-}
 
 # Grant baseline read-only permissions to organization SA
 resource "google_organization_iam_member" "terraform_org_baseline" {
@@ -80,20 +73,6 @@ resource "google_organization_iam_member" "terraform_org_baseline" {
   member = "serviceAccount:${google_service_account.terraform_organization.email}"
 }
 
-# Grant minimal permissions to webapp team SA (tenant-scoped)
-resource "google_organization_iam_member" "terraform_webapp_team_baseline" {
-  for_each = toset([
-    "roles/viewer",
-    "roles/iam.securityReviewer",
-    "roles/logging.viewer",
-    "roles/monitoring.viewer",
-    "roles/iam.serviceAccountTokenCreator",
-  ])
-  
-  org_id = var.org_id
-  role   = each.key
-  member = "serviceAccount:${google_service_account.terraform_webapp_team.email}"
-}
 
 # Grant state bucket access to organization SA
 resource "google_storage_bucket_iam_member" "terraform_org_state" {
@@ -119,17 +98,6 @@ resource "google_storage_bucket_iam_member" "terraform_security_state" {
   }
 }
 
-# Grant state bucket access to webapp team SA
-resource "google_storage_bucket_iam_member" "terraform_webapp_team_state" {
-  bucket = data.terraform_remote_state.bootstrap.outputs.tfstate_bucket
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.terraform_webapp_team.email}"
-  
-  condition {
-    title      = "Only webapp team state"
-    expression = "resource.name.startsWith('${data.terraform_remote_state.bootstrap.outputs.tfstate_bucket}/tenant-webapp-team/')"
-  }
-}
 
 # Allow GitHub Actions to impersonate service accounts
 resource "google_service_account_iam_member" "github_terraform_org" {
@@ -151,13 +119,16 @@ resource "google_service_account_iam_member" "github_terraform_bootstrap" {
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_actions.name}/attribute.repository/u2i/gcp-org-compliance"
 }
 
-# Allow GitHub Actions from webapp-team-infrastructure repo to impersonate webapp team SA
-resource "google_service_account_iam_member" "github_terraform_webapp_team" {
-  service_account_id = google_service_account.terraform_webapp_team.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_actions.name}/attribute.repository/u2i/webapp-team-infrastructure"
-}
 
+
+
+
+# Grant webapp team project SA access to shared state bucket (temporary until migration)
+resource "google_storage_bucket_iam_member" "webapp_team_shared_state" {
+  bucket = data.terraform_remote_state.bootstrap.outputs.tfstate_bucket
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:terraform@u2i-tenant-webapp.iam.gserviceaccount.com"
+}
 
 # Note: Write permissions will be granted via PAM entitlements
 # This ensures zero-standing-privilege model where SAs have read-only access
