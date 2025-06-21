@@ -52,7 +52,7 @@ module "org_structure" {
 
 # Security policies with exceptions for legacy
 module "security_baseline" {
-  source = "github.com/u2i/terraform-google-compliance-modules//modules/security-baseline?ref=v1.5.0"
+  source = "github.com/u2i/terraform-google-compliance-modules//modules/security-baseline?ref=v1.8.0"
 
   parent_id  = var.org_id
   policy_for = "organization"
