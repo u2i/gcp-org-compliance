@@ -206,3 +206,14 @@ resource "google_folder_iam_member" "developers_folder_permissions" {
 
 # Note: Approvers group permissions are configured in PAM module
 # They inherit all developer permissions plus PAM approval rights
+
+# Cloud Deploy org policy to disable automatic label generation
+# This prevents Cloud Deploy from adding labels with dots that break Certificate Manager
+resource "google_organization_policy" "disable_cloud_deploy_labels" {
+  org_id     = var.org_id
+  constraint = "constraints/clouddeploy.disableServiceLabelGeneration"
+
+  boolean_policy {
+    enforced = true
+  }
+}
