@@ -2,8 +2,9 @@
 # This file manages cross-project resources that the webapp team cannot manage themselves
 
 locals {
-  webapp_project_id = "u2i-tenant-webapp"
-  webapp_team_name  = "webapp-team"
+  webapp_project_id      = "u2i-tenant-webapp"
+  webapp_prod_project_id = "u2i-tenant-webapp-prod"
+  webapp_team_name       = "webapp-team"
 }
 
 # Create tenant namespace in shared clusters
@@ -50,7 +51,7 @@ resource "kubernetes_namespace" "webapp_prod" {
     }
 
     annotations = {
-      "tenant-project" = local.webapp_project_id
+      "tenant-project" = local.webapp_prod_project_id
       "created-by"     = "terraform"
       "managed-by"     = "shared-gke-resources"
     }
@@ -261,7 +262,7 @@ resource "google_project_iam_member" "webapp_cloud_deploy_nonprod_access" {
 resource "google_project_iam_member" "webapp_cloud_deploy_prod_access" {
   project = data.terraform_remote_state.shared_gke.outputs.projects_created["u2i-gke-prod"].project_id
   role    = "roles/container.developer"
-  member  = "serviceAccount:cloud-deploy-sa@${local.webapp_project_id}.iam.gserviceaccount.com"
+  member  = "serviceAccount:cloud-deploy-sa@${local.webapp_prod_project_id}.iam.gserviceaccount.com"
 }
 
 # RBAC for tenant namespace access

@@ -80,6 +80,22 @@ resource "google_dns_record_set" "u2i_dev_wildcard" {
 # Note: Specific application DNS records should be managed in their respective projects
 # This allows each team to manage their own DNS without needing org-level permissions
 
+# Delegate webapp.u2i.dev to the webapp team's DNS zone
+resource "google_dns_record_set" "webapp_delegation" {
+  project      = google_project.dns_project.project_id
+  managed_zone = google_dns_managed_zone.u2i_dev.name
+  name         = "webapp.${google_dns_managed_zone.u2i_dev.dns_name}"
+  type         = "NS"
+  ttl          = 300
+  
+  rrdatas = [
+    "ns-cloud-d1.googledomains.com.",
+    "ns-cloud-d2.googledomains.com.",
+    "ns-cloud-d3.googledomains.com.",
+    "ns-cloud-d4.googledomains.com."
+  ]
+}
+
 # Create SPF record for email
 resource "google_dns_record_set" "u2i_dev_spf" {
   project      = google_project.dns_project.project_id

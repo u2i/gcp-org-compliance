@@ -64,7 +64,9 @@ resource "google_project_service" "gke_apis" {
       "container.googleapis.com",
       "compute.googleapis.com",
       "logging.googleapis.com",
-      "monitoring.googleapis.com"
+      "monitoring.googleapis.com",
+      "serviceusage.googleapis.com",
+      "cloudresourcemanager.googleapis.com"
     ]) : "${pair[0]}-${pair[1]}" => {
       project = pair[0]
       service = pair[1]
@@ -168,6 +170,32 @@ resource "google_compute_router_nat" "gke_nat" {
   
   nat_ip_allocate_option             = "AUTO_ONLY"
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+}
+
+# Firewall rule to allow GCE health checks for ingress
+# IP ranges are documented at: https://cloud.google.com/load-balancing/docs/health-check-concepts#ip-ranges
+resource "google_compute_firewall" "gke_ingress_health_checks" {
+  project     = google_project.gke_projects["u2i-gke-network"].project_id
+  name        = "gke-allow-ingress-health-checks"
+  network     = google_compute_network.gke_shared_network.name
+  description = "Allow GCE health checks for GKE ingress controllers - uses official Google Cloud health check ranges"
+
+  allow {
+    protocol = "tcp"
+  }
+
+  # Official Google Cloud health check source ranges
+  # These are guaranteed by Google and documented in their official documentation
+  source_ranges = [
+    "35.191.0.0/16",   # Google Cloud health checks (global and regional)
+    "130.211.0.0/22",  # Google Cloud health checks (global and regional)
+  ]
+
+  # Target all GKE nodes in both clusters
+  target_tags = [
+    "gke-prod-autopilot-${substr(google_container_cluster.prod_autopilot.id, -8, -1)}-node",
+    "gke-nonprod-autopilot-${substr(google_container_cluster.nonprod_autopilot.id, -8, -1)}-node"
+  ]
 }
 
 # IAM permissions for GKE service accounts to use Shared VPC subnets
