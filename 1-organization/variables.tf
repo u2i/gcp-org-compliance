@@ -76,29 +76,3 @@ variable "tailscale_auth_key" {
   default     = ""  # Set via environment variable TF_VAR_tailscale_auth_key
 }
 
-# OAuth configuration for automatic key rotation
-variable "enable_auto_key_rotation" {
-  description = "Enable automatic auth key rotation using OAuth"
-  type        = bool
-  default     = true  # Enabled by default for OAuth setup
-}
-
-variable "tailscale_tailnet" {
-  description = "Your Tailscale tailnet name (e.g., 'example.com' or tailnet ID from admin console)"
-  type        = string
-  default     = ""  # Will be set in terraform.tfvars
-}
-
-variable "tailscale_oauth_client_id" {
-  description = "Tailscale OAuth client ID (from https://login.tailscale.com/admin/settings/oauth)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "tailscale_oauth_client_secret" {
-  description = "Tailscale OAuth client secret"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
