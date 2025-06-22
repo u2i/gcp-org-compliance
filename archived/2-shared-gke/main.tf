@@ -255,7 +255,7 @@ resource "google_container_cluster" "prod_autopilot" {
     gdpr_compliant    = "true"
   }
   
-  deletion_protection = true
+  deletion_protection = false
   
   depends_on = [google_project_service.gke_apis]
 }
