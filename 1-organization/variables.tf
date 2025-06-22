@@ -68,3 +68,10 @@ variable "tfstate_bucket" {
   type        = string
   default     = "u2i-tfstate"
 }
+
+variable "tailscale_auth_key" {
+  description = "Tailscale auth key from https://login.tailscale.com/admin/settings/keys (will be stored in Secret Manager)"
+  type        = string
+  sensitive   = true
+  default     = ""  # Set via environment variable TF_VAR_tailscale_auth_key
+}
