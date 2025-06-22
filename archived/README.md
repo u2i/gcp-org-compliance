@@ -12,3 +12,10 @@ This directory previously contained the configuration for shared GKE clusters (u
 The shared clusters have been destroyed, and all workloads have been migrated to dedicated clusters.
 
 **Note**: The GKE projects (u2i-gke-network, u2i-gke-nonprod, u2i-gke-prod) still exist but are empty. They have deletion protection enabled and can be manually deleted if needed.
+
+## 3-shared-gke
+
+This directory contained the configuration for accessing the shared GKE clusters from tenant projects. It provided remote state access and namespace creation.
+
+**Archived on**: June 22, 2025
+**Reason**: No longer needed since shared clusters have been removed and teams now use project-specific clusters.
