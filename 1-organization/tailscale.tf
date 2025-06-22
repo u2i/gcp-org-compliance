@@ -80,6 +80,9 @@ resource "google_secret_manager_secret_iam_member" "tailscale_secret_access" {
 # NOTE: The auth key must be manually added to Secret Manager first
 # Run: echo -n "tskey-auth-xxxxx" | gcloud secrets versions add tailscale-auth-key --project=PROJECT_ID --data-file=-
 
+# OAuth automation resources are included via tailscale-oauth.tf in the same directory
+# They will be automatically applied when enable_auto_key_rotation = true
+
 # Deploy Tailscale infrastructure
 module "tailscale_org_setup" {
   source = "../../../u2i-terraform-modules/tailscale-org-setup"
