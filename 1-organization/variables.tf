@@ -76,3 +76,15 @@ variable "tailscale_auth_key" {
   default     = ""  # Set via environment variable TF_VAR_tailscale_auth_key
 }
 
+variable "domain" {
+  description = "Organization domain"
+  type        = string
+  default     = "u2i.com"
+}
+
+variable "enable_audit_access" {
+  description = "Whether to grant organization-wide audit access to auditors group"
+  type        = bool
+  default     = false
+}
+
