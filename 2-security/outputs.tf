@@ -16,8 +16,8 @@ output "audit_dataset_id" {
 output "notification_channels" {
   value = {
     security_email    = google_monitoring_notification_channel.security_email.id
-    security_slack    = google_monitoring_notification_channel.security_slack.id
-    oncall_pagerduty = google_monitoring_notification_channel.oncall_pagerduty.id
+    security_slack    = try(google_monitoring_notification_channel.security_slack[0].id, "")
+    oncall_pagerduty = try(google_monitoring_notification_channel.oncall_pagerduty[0].id, "")
   }
   description = "Notification channel IDs for alerts"
 }
@@ -26,7 +26,7 @@ output "pam_status" {
   value = {
     deployed = true
     break_glass_enabled = true
-    entitlements_count = length(keys(module.pam_access_control.standard_entitlements))
+    break_glass_entitlement = module.pam_access_control.break_glass_entitlement
   }
   description = "PAM deployment status"
 }

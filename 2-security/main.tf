@@ -25,10 +25,28 @@ data "terraform_remote_state" "organization" {
 }
 
 locals {
-  org_id              = data.terraform_remote_state.organization.outputs.organization_id
-  security_folder_id  = data.terraform_remote_state.organization.outputs.folder_ids["Security"]
-  production_folder   = data.terraform_remote_state.organization.outputs.folder_ids["Production"]
-  nonproduction_folder = data.terraform_remote_state.organization.outputs.folder_ids["Non-Production"]
+  # Use values from terraform.tfvars since organization outputs don't include these
+  org_id              = var.org_id
+  # Create folders directly since they're not in the organization outputs
+  security_folder_id  = google_folder.security.id
+  production_folder   = google_folder.production.id
+  nonproduction_folder = google_folder.nonproduction.id
+}
+
+# Create the necessary folders
+resource "google_folder" "security" {
+  display_name = "Security"
+  parent       = "organizations/${var.org_id}"
+}
+
+resource "google_folder" "production" {
+  display_name = "Production"
+  parent       = "organizations/${var.org_id}"
+}
+
+resource "google_folder" "nonproduction" {
+  display_name = "Non-Production"
+  parent       = "organizations/${var.org_id}"
 }
 
 # Security project for centralized security services
@@ -142,6 +160,14 @@ resource "google_kms_crypto_key" "audit_logs_key" {
   }
 }
 
+# Service account for GitHub Actions CI/CD
+resource "google_service_account" "github_actions" {
+  project      = google_project.security.project_id
+  account_id   = "github-actions"
+  display_name = "GitHub Actions CI/CD"
+  description  = "Service account for GitHub Actions automation with PAM elevation"
+}
+
 # Notification channels for security alerts
 resource "google_monitoring_notification_channel" "security_email" {
   project      = google_project.security.project_id
@@ -154,6 +180,7 @@ resource "google_monitoring_notification_channel" "security_email" {
 }
 
 resource "google_monitoring_notification_channel" "security_slack" {
+  count        = var.slack_webhook_url != "" ? 1 : 0
   project      = google_project.security.project_id
   display_name = "Security Alerts Slack"
   type         = "slack"
@@ -162,17 +189,18 @@ resource "google_monitoring_notification_channel" "security_slack" {
     channel_name = "#security-alerts"
   }
   
-  sensitive_labels {
-    url = var.slack_webhook_url
+  user_labels = {
+    webhook_url = var.slack_webhook_url
   }
 }
 
 resource "google_monitoring_notification_channel" "oncall_pagerduty" {
+  count        = var.pagerduty_service_key != "" ? 1 : 0
   project      = google_project.security.project_id
   display_name = "On-Call PagerDuty"
   type         = "pagerduty"
   
-  labels = {
+  user_labels = {
     service_key = var.pagerduty_service_key
   }
 }

@@ -15,10 +15,17 @@ This implementation follows a **zero-standing-privilege model** where:
 ```
 gcp-org-compliance/
 ├── 0-bootstrap/       # Bootstrap project and Terraform state management
-├── 1-organization/    # Organization-wide policies and folder structure  
+├── 1-organization/    # Organization-wide policies and folder structure
+├── 2-security/        # PAM, centralized logging, and monitoring
+├── policies/          # Security and compliance policies
 ├── scripts/           # Migration and assessment utilities
 └── MIGRATION_PLAN.md  # Detailed migration strategy
 ```
+
+## 📋 Key Policies
+
+- **[GCP Break-Glass & Change-Management Policy](policies/gcp-break-glass-change-management-policy.md)** - Defines approval workflows, JIT access, and emergency procedures
+- **Security Controls** - ISO 27001, SOC 2, and GDPR aligned
 
 ## 🚀 Current Status
 

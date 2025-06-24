@@ -1,114 +1,145 @@
-# Security Phase - PAM and Break Glass Implementation
+# Security Phase - Centralized Security Infrastructure
 
-This phase implements organization-wide Privileged Access Management (PAM) with break glass capabilities.
+This phase implements organization-wide security controls including Privileged Access Manager (PAM), centralized logging, and monitoring infrastructure aligned with the [GCP Break-Glass & Change-Management Policy](../policies/gcp-break-glass-change-management-policy.md).
 
 ## Overview
 
-The security phase establishes:
-- Zero-standing-privilege architecture
-- Just-in-time access elevation via PAM
-- Emergency break glass procedures
-- Centralized audit logging
-- Security monitoring and alerting
+The security phase provides:
+- **PAM (Privileged Access Manager)** - Just-in-time access with proper approvals
+- **Centralized Audit Logging** - All security events logged to BigQuery
+- **Security Monitoring** - Real-time alerts for critical events
+- **KMS Encryption** - At-rest encryption for sensitive data
 
-## Break Glass Access
+## JIT Access Implementation
 
-### Who Can Activate Break Glass
-1. **Failsafe Account** (`gcp-failsafe@u2i.com`)
-2. **Emergency Responders Group** (`gcp-emergency-responders@u2i.com`)
+Per the organization policy, we use a dual-approval system for privileged access:
 
-### What Break Glass Provides
-- Organization-wide owner permissions
-- 1-hour duration (automatic expiration)
-- Self-approval (no waiting)
-- Immediate alerts to security team
+### Change Lanes
 
-### How to Activate
+| Lane | Normal Approval | Break-Glass Duration | Break-Glass Approval |
+|------|----------------|---------------------|---------------------|
+| App Code (Lane 1) | 1 Prod Support reviewer | 30 min | Peer approval via Slack |
+| Env Infra (Lane 2) | 2 Tech Lead reviews | 1 hour | Tech Lead + Tech Mgmt |
+| Org Infra (Lane 3) | 2 Tech Lead + Tech Mgmt | 30 min | 2 Tech Mgmt approvers |
+
+### PAM Entitlements
+
+| Entitlement | Duration | Approval Required | Use Case |
+|------------|----------|------------------|----------|
+| admin-elevation | 2 hours | 1 Tech Lead peer | Infrastructure changes |
+| deployment-approver-access | 2 hours | 1 peer approver | Production deployments |
+| developer-prod-access | 2 hours | 1 Tech Lead | Production debugging |
+| billing-access | 4 hours | 1 Tech Lead | Financial reports |
+| break-glass-emergency | 1 hour | 2 Tech Mgmt | True emergencies |
+
+**Note**: The policy requires dual approval (no self-approval), enforced by Google PAM.
+
+## Requesting JIT Access
+
+### Standard Access Request
 ```bash
+# Request production access for debugging
 gcloud pam grants create \
-  --entitlement="break-glass-emergency" \
-  --justification="EMERGENCY: [reason]" \
-  --requested-duration="3600s" \
+  --entitlement="developer-prod-access" \
+  --justification="Debug customer issue #1234" \
+  --requested-duration="7200s" \
   --location="global" \
-  --project="u2i-security"
+  --organization="[ORG_ID]"
 ```
 
-## Standard PAM Entitlements
+### Emergency Break-Glass
+For SEV-1 incidents requiring immediate access:
 
-| Entitlement | Eligible Users | Permissions | Duration | Approvals |
-|-------------|----------------|-------------|----------|-----------|
-| Platform Engineer Prod | gcp-platform-engineers@ | Platform admin | 2 hours | 1 approval |
-| Security Analyst | gcp-security-analysts@ | Org-wide read | 4 hours | 2 approvals |
-| Incident Responder | gcp-incident-responders@ | Prod emergency | 1 hour | 1 approval |
-| Compliance Auditor | gcp-compliance-auditors@ | Audit read-only | 4 hours | 1 approval |
+```bash
+# Request break-glass access (requires 2 Tech Mgmt approvals)
+gcloud pam grants create \
+  --entitlement="break-glass-emergency" \
+  --justification="SEV-1: Production outage affecting all users" \
+  --requested-duration="3600s" \
+  --location="global" \
+  --organization="[ORG_ID]"
+```
 
-## Prerequisites
-
-Before deploying this phase:
-
-1. **Create Google Groups** (in Workspace Admin):
-   - `gcp-emergency-responders@u2i.com`
-   - `gcp-platform-engineers@u2i.com`
-   - `gcp-platform-leads@u2i.com`
-   - `gcp-security-analysts@u2i.com`
-   - `gcp-security-leads@u2i.com`
-   - `gcp-incident-responders@u2i.com`
-   - `gcp-incident-commanders@u2i.com`
-   - `gcp-compliance-auditors@u2i.com`
-   - `gcp-compliance-leads@u2i.com`
-
-2. **Configure Notification Channels**:
-   - Set up Slack webhook URL
-   - Configure PagerDuty integration
-   - Verify email addresses
+**Important**: Break-glass requests require approval from 2 Tech Management members and trigger immediate alerts to the security team.
 
 ## Deployment
 
+### Prerequisites
+- Terraform 1.6+
+- Organization admin permissions
+- Groups created in Google Workspace:
+  - `gcp-admins@[domain]` - Tech Management
+  - `gcp-developers@[domain]` - Development team
+  - `gcp-approvers@[domain]` - Production approvers (Prod Support+)
+  - `@u2i/tech-leads` - GitHub team for security reviews
+
+### Deploy Security Infrastructure
 ```bash
-cd gcp-org-compliance/2-security
+cd 2-security
 terraform init
-terraform plan -var-file=../terraform.tfvars
-terraform apply -var-file=../terraform.tfvars
+terraform plan
+terraform apply
 ```
 
-## Post-Deployment
+### Resources Created
+- **Projects**: `[prefix]-security`, `[prefix]-logging`
+- **PAM Entitlements**: 5 standard + 1 break-glass
+- **Monitoring**: Break-glass alerts, audit dashboards
+- **BigQuery**: Centralized audit log dataset
 
-1. **Test Break Glass**:
-   ```bash
-   # As failsafe account, test emergency access
-   gcloud pam grants create \
-     --entitlement="break-glass-emergency" \
-     --justification="TEST: Testing break glass procedure" \
-     --requested-duration="300s" \
-     --location="global" \
-     --project="u2i-security"
-   ```
+## Monitoring & Alerts
 
-2. **Verify Alerts**:
-   - Check that security team received email
-   - Verify Slack notification
-   - Confirm PagerDuty alert (if configured)
+### Break-Glass Usage Alert
+Any use of break-glass access triggers:
+- Email to Tech Management team
+- Cloud Monitoring alert
+- Audit log entry
+- Requirement for post-incident review
 
-3. **Review Audit Logs**:
-   ```sql
-   -- In BigQuery
-   SELECT 
-     timestamp,
-     protoPayload.authenticationInfo.principalEmail,
-     protoPayload.request.justification.unstructuredJustification
-   FROM `u2i-logging.audit_logs.pam_activities`
-   WHERE DATE(timestamp) = CURRENT_DATE()
-   ```
+### Audit Queries
+```sql
+-- Recent PAM activities
+SELECT 
+  timestamp,
+  protoPayload.authenticationInfo.principalEmail as requester,
+  protoPayload.request.justification.unstructuredJustification as reason,
+  protoPayload.response.state as status
+FROM `[project].audit_logs.cloudaudit_logs_*`
+WHERE protoPayload.serviceName = 'privilegedaccessmanager.googleapis.com'
+  AND DATE(timestamp) >= CURRENT_DATE()
+ORDER BY timestamp DESC
+```
 
-## Monitoring
+## Post-Incident Requirements
 
-- **Dashboard**: Cloud Console → Monitoring → "PAM Emergency Access"
-- **Audit Logs**: BigQuery → `u2i-logging.audit_logs`
-- **Alerts**: Configured via notification channels
+Per policy section 5, after any break-glass usage:
+1. Create retro-PR within 24 hours
+2. Obtain Tech Lead security review
+3. Document in incident report
+4. Update runbooks if needed
 
-## Compliance
+## Compliance Alignment
 
 This implementation satisfies:
-- ISO 27001 A.9.2.3 - Management of privileged access rights
-- SOC 2 CC6.1 - Logical access controls
-- GDPR Article 32 - Security of processing
+- **ISO 27001**: A.9.2.3 (Privileged access), A.12.4.1 (Event logging)
+- **SOC 2**: CC6.1 (Logical access), CC7.2 (System monitoring)
+- **GDPR**: Article 32 (Security measures)
+
+## Integration with JIT Platforms
+
+While this phase uses Google PAM, the organization may also use:
+- **Opal** - Primary JIT platform for Slack-native approvals
+- **Sym/ConductorOne** - Alternative JIT platforms
+
+These platforms integrate with the same Google Groups and follow the same approval matrix defined in the policy.
+
+## Next Steps
+
+1. Configure notification channels in Google Workspace
+2. Set up Opal/Sym integration for Slack approvals
+3. Train Tech Leads on security review process
+4. Schedule semi-annual policy review
+
+For detailed procedures, see:
+- [GCP Break-Glass & Change-Management Policy](../policies/gcp-break-glass-change-management-policy.md)
+- [Security Review Process](../policies/security-review-process.md)
