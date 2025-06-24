@@ -1,6 +1,6 @@
 # GCP Break-Glass & Change-Management Policy
 
-**Version 0.3 — 24 June 2025**
+**Version 0.4 — 24 June 2025**
 
 ## 1. Purpose
 
@@ -14,7 +14,7 @@ Applies to application code, Kubernetes & Config Connector manifests, Terraform 
 
 ## 3. Roles & Responsibilities
 
-All Tech Leads receive AppSec training, so they can perform security reviews.
+All Tech Leads receive AppSec training†, so they can perform security reviews.
 
 | Role | Primary Privileges | May Approve Code Review | May Approve Security Review | May Approve JIT | Notes |
 |------|-------------------|------------------------|---------------------------|-----------------|-------|
@@ -24,59 +24,76 @@ All Tech Leads receive AppSec training, so they can perform security reviews.
 | Tech Mgmt | Same as Tech Lead plus org-level sign-off | ✅ | ✅ | ✅ | CEO/COO |
 | Non-Tech Mgmt | Read-only dashboards | — | — | — | |
 
+† Tech Leads complete the internal AppSec-101 course and annual refresher; records are stored in the LMS for auditor sampling.
+
 ## 4. Change Lanes & Approval Matrix
 
-| # | Lane | Normal Path & Approvals | Security Review Trigger | Break-Glass Path (any lane) |
+| # | Lane | Normal Path & Approvals | When Security Review Required | Break-Glass Path<br>(includes TTL) |
 |---|------|------------------------|------------------------|---------------------------|
-| 1 | App Code + Manifests | GitHub PR → 1 Prod-Support+ reviewer → GitHub Actions deploy → Cloud Deploy gate (1 approver) | Required when:<br>• files match `/auth/**`, `/infra/secrets/**`, or `/src/security/**`<br>• Label `security-review-needed` added<br>• SAST/Dependency scanner flags ≥High severity | PagerDuty SEV-1 → JIT-Deploy role (30 min) → peer approval in Slack. Retro-PR must be security-reviewed (Tech Lead) within 24 h. |
-| 2 | Env Infra (Terraform) | PR → 2 Tech-Lead reviews → CI plan/apply | Same triggers as lane #1 plus any IAM or network changes | JIT-tf-admin (1 h) with 2 approvers (Tech-Lead + Tech Mgmt); retro-PR + security review within 24 h |
-| 3 | Org-Level Infra (Terraform) | PR → 2 Tech-Lead reviews + Tech Mgmt sign-off → CI apply | Always (contains IAM/org-policy) | JIT-org-admin (30 min) with 2 Tech Mgmt approvers; retro-PR + security review within 24 h |
+| 1 | App Code + Manifests | • GitHub PR → 1 Prod-Support+ reviewer → GitHub Actions deploy → Cloud Deploy gate (1 approver)<br>• Rollback: same gate—PR with `revert:` prefix merges, triggering redeploy. | Triggers: paths `/auth/**`, `/infra/secrets/**`, `/src/security/**`; label `security-review-needed`; SAST/SCA ≥High. | PagerDuty SEV-1 → JIT-Deploy (30 min) role → peer approval in Slack. Retro-PR + security review within 24 h. |
+| 2 | Env Infra (Terraform) | PR → 2 Tech-Lead reviews → CI plan/apply. | Same triggers as lane #1 plus any IAM or network change. | JIT-tf-admin (60 min) with 2 approvers (Tech-Lead + Tech Mgmt); retro-PR + security review within 24 h. |
+| 3 | Org-Level Infra (Terraform) | PR → 2 Tech-Lead reviews + Tech Mgmt sign-off → CI apply. | Always (contains IAM/org-policy). | JIT-org-admin (30 min) with 2 Tech Mgmt approvers; retro-PR + security review within 24 h. |
 
-**How security review is enforced:** CODEOWNERS lists `@u2i/tech-leads` for security-sensitive paths. Branch-protection rule "Require review from Code Owners" ensures at least one Tech Lead approves when triggers fire. A GitHub Actions check fails if SCA/SAST reports unsuppressed High/Critical issues.
+CODEOWNERS lists `@u2i/tech-leads` for security-sensitive paths. Branch-protection rule "Require review from Code Owners" ensures at least one Tech Lead approves when triggers fire. A GitHub Actions check fails if SCA/SAST reports unsuppressed High/Critical issues.
 
 ## 5. Secure Code Review Process
 
-**Automated Detection**
-• GitHub Action runs Dependabot, trivy, and custom Go/TS linters on every PR.
-• On ≥High findings the action adds label `security-review-needed`.
+**Automated Detection**  
+• GitHub Action runs Dependabot, trivy, and custom Go/TS linters on every PR.  
+• ≥High findings add label `security-review-needed`.
 
-**Manual Security Review**
-• Performed by any Tech Lead (all AppSec-trained).
-• Focus areas: auth flows, secret handling, encryption, external package changes, RBAC/ACLs, egress rules.
+**Manual Security Review**  
+• Performed by any Tech Lead (AppSec-trained).  
+• Focus areas: auth flows, secret handling, encryption, external package changes, RBAC/ACLs, egress rules.  
+• Dependency lock-file bump (e.g., `package-lock.json`, `go.sum`) requires reviewer to verify no new high-risk transitive deps.
 
-**Approval & Documentation**
-• Reviewer leaves `SECURITY LGTM` comment summarising findings/mitigations.
+**Approval & Documentation**  
+• Reviewer leaves `SECURITY LGTM` comment summarising findings/mitigations.  
 • Merge is gated until at least one `SECURITY LGTM` is present when triggers apply.
 
-**Break-Glass Follow-up**
+**Break-Glass Follow-up**  
 • Retro-PRs created after incident must obtain a Tech-Lead security review within 24 hours.
 
 ## 6. JIT / Break-Glass Controls
 
-**Platform:** Opal (or Sym/ConductorOne) for Slack-native role elevation.
+**Platform** – Google Cloud Privileged Access Manager (PAM); Cloud Function listens to PAM Pub/Sub events and posts request & decision messages to #audit-log. Messages and grant logs are exported to BigQuery with 400-day retention.
 
-**TTL:** 15–60 minutes depending on lane.
+**TTL by lane** – Lane 1: 30 min · Lane 2: 60 min · Lane 3: 30 min.
 
-**Dual Approval:** Requestor + one peer (cannot self-approve); org-level requires Tech Mgmt.
+**Dual approval** – Requestor + one peer (cannot self-approve); org-level requires two Tech Mgmt approvers.
 
-**Evidence:** IAM activity log, Opal audit record, PagerDuty incident note, retro-PR.
+**Runbook** – `runbooks/pam-break-glass.md` defines step-by-step procedure.
+
+**Evidence** – IAM activity log, PAM grant log, Slack approval archive, PagerDuty incident note, retro-PR.
 
 ## 7. Audit Artifacts & Retention
 
 | Control | Evidence | Retention |
 |---------|----------|-----------|
-| Code review (functional & security) | GitHub PR, reviews, CI checks | 1 year |
-| Deploy approvals | Cloud Deploy release history | 1 year |
-| JIT grants | IAM logs + Opal export | 1 year |
+| Code & security reviews | GitHub PR, reviews, CI checks | 400 days |
+| Deploy approvals | Cloud Deploy release history | 400 days |
+| JIT/PAM grants | IAM logs + PAM grant export | 400 days |
 | SAST/SCA reports | GitHub Action artifacts | 90 days |
 
 ## 8. Policy Maintenance
 
 **Owner:** Head of Engineering & Security Lead.
 
-**Review cadence:** Semi-annual or after any SEV-1 involving break-glass.
+**Review cadence:** Semi-annual or after any SEV-1 involving break-glass or material change to GCP PAM.
 
 **Changes tracked via:** PRs to this doc in `compliance/policies` repo.
+
+## 9. Glossary
+
+**Lane** – A category of change with its own approval flow (see §4).
+
+**TTL** – Time-to-live for JIT role before automatic revocation.
+
+**JIT** – Just-In-Time privilege elevation via GCP PAM.
+
+**Retro-PR** – Pull Request created post-incident to codify manual changes made under break-glass.
+
+**SECURITY LGTM** – GitHub comment by Tech Lead affirming secure code review completion.
 
 **Last approved:** 24 June 2025  
 **Next review due:** 24 December 2025

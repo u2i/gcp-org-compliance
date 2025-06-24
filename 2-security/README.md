@@ -125,13 +125,15 @@ This implementation satisfies:
 - **SOC 2**: CC6.1 (Logical access), CC7.2 (System monitoring)
 - **GDPR**: Article 32 (Security measures)
 
-## Integration with JIT Platforms
+## Integration with Audit Systems
 
-While this phase uses Google PAM, the organization may also use:
-- **Opal** - Primary JIT platform for Slack-native approvals
-- **Sym/ConductorOne** - Alternative JIT platforms
+Per policy section 6, PAM events are:
+- Published to Pub/Sub for real-time processing
+- Posted to `#audit-log` Slack channel via Cloud Function
+- Exported to BigQuery with 400-day retention
+- Integrated with Cloud Monitoring for alerting
 
-These platforms integrate with the same Google Groups and follow the same approval matrix defined in the policy.
+The organization uses Google PAM as the primary JIT platform, with Cloud Functions providing Slack integration for approval notifications.
 
 ## Next Steps
 
