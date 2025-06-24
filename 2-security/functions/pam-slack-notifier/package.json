@@ -7,7 +7,9 @@
     "node": "18"
   },
   "dependencies": {
-    "@google-cloud/pubsub": "^3.7.0"
+    "@google-cloud/pubsub": "^3.7.0",
+    "@google-cloud/secret-manager": "^5.0.0",
+    "@slack/web-api": "^6.11.0"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

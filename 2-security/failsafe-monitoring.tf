@@ -27,7 +27,7 @@ resource "google_monitoring_alert_policy" "failsafe_account_alert" {
   alert_strategy {
     auto_close = "86400s"  # 24 hours
     notification_rate_limit {
-      period = "60s"  # Alert immediately, then every minute
+      period = "300s"  # Alert immediately, then every 5 minutes
     }
   }
   
@@ -85,7 +85,7 @@ resource "google_monitoring_dashboard" "failsafe_monitoring" {
               dataSets = [{
                 timeSeriesQuery = {
                   timeSeriesFilter = {
-                    filter = "resource.type=\"audited_resource\" AND protoPayload.authenticationInfo.principalEmail=\"u2i-failsafe@google.com\""
+                    filter = "metric.type=\"logging.googleapis.com/user/failsafe-account-usage\""
                   }
                 }
               }]

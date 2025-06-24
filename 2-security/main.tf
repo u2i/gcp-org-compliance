@@ -91,7 +91,8 @@ resource "google_project_service" "security_apis" {
     "cloudfunctions.googleapis.com",
     "pubsub.googleapis.com",
     "artifactregistry.googleapis.com",
-    "cloudbuild.googleapis.com"
+    "cloudbuild.googleapis.com",
+    "secretmanager.googleapis.com"
   ])
 
   project = google_project.security.project_id

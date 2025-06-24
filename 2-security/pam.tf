@@ -189,9 +189,63 @@ resource "google_cloudfunctions_function" "pam_slack_notifier" {
   }
 
   environment_variables = {
-    SLACK_WEBHOOK_URL = var.slack_webhook_url
     SLACK_CHANNEL     = "#audit-log"
+    DEPLOYMENT_TIMESTAMP = timestamp()
   }
+}
+
+# Organization-wide log sink for PAM events
+resource "google_logging_organization_sink" "pam_audit_sink" {
+  name        = "pam-audit-sink"
+  org_id      = var.org_id
+  destination = "pubsub.googleapis.com/projects/${google_project.security.project_id}/topics/${google_pubsub_topic.pam_events.name}"
+  
+  # Filter for PAM audit logs
+  filter = <<-EOT
+    protoPayload.serviceName="privilegedaccessmanager.googleapis.com"
+    AND (
+      protoPayload.methodName=~".*CreateGrant.*"
+      OR protoPayload.methodName=~".*ApproveGrant.*"
+      OR protoPayload.methodName=~".*DenyGrant.*"
+      OR protoPayload.methodName=~".*RevokeGrant.*"
+    )
+  EOT
+  
+  include_children = true
+  
+  depends_on = [google_pubsub_topic.pam_events]
+}
+
+# Grant the log sink permission to publish to the topic
+resource "google_pubsub_topic_iam_member" "pam_sink_publisher" {
+  project = google_project.security.project_id
+  topic   = google_pubsub_topic.pam_events.name
+  role    = "roles/pubsub.publisher"
+  member  = google_logging_organization_sink.pam_audit_sink.writer_identity
+  
+  depends_on = [google_logging_organization_sink.pam_audit_sink]
+}
+
+# Secret Manager for Slack bot token
+resource "google_secret_manager_secret" "slack_bot_token" {
+  project   = google_project.security.project_id
+  secret_id = "slack-pam-bot-token"
+  
+  depends_on = [google_project_service.security_apis["secretmanager.googleapis.com"]]
+  
+  replication {
+    auto {}
+  }
+}
+
+# Grant Cloud Function access to the secret
+resource "google_secret_manager_secret_iam_member" "slack_token_accessor" {
+  project   = google_project.security.project_id
+  secret_id = google_secret_manager_secret.slack_bot_token.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_project.security.project_id}@appspot.gserviceaccount.com"
+  
+  depends_on = [google_secret_manager_secret.slack_bot_token]
 }
 
 # Output configuration aligned with policy v0.7
