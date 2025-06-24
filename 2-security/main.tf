@@ -134,7 +134,12 @@ resource "google_bigquery_dataset" "audit_logs" {
 
   access {
     role          = "READER"
-    group_by_email = "gcp-admins@${var.domain}"
+    group_by_email = local.groups.techmgmt
+  }
+
+  access {
+    role          = "READER"
+    group_by_email = local.groups.techlead
   }
 
   labels = {

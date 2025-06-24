@@ -1,5 +1,5 @@
-# Simplified PAM Configuration for Small Company
-# Aligned with GCP Break-Glass Policy v0.4
+# PAM Configuration aligned with GCP Break-Glass Policy v0.7
+# Implements 4 lanes with proper group assignments
 
 module "pam_access_control" {
   source = "../../terraform-google-compliance-modules/modules/pam-access-control"
@@ -10,14 +10,14 @@ module "pam_access_control" {
   audit_dataset_id   = google_bigquery_dataset.audit_logs.dataset_id
   bigquery_location  = var.primary_region
 
-  # Simplified group structure
+  # Group structure per policy v0.7
   failsafe_account           = var.failsafe_account
-  emergency_responders_group = "gcp-admins@${var.domain}"  # Tech Mgmt group
+  emergency_responders_group = local.groups.techmgmt  # Tech Mgmt group
   
-  # Notification emails - send to admin group
-  security_team_email   = "gcp-admins@${var.domain}"
-  compliance_team_email = "gcp-admins@${var.domain}"  
-  ciso_email           = "gcp-admins@${var.domain}"
+  # Notification emails - send to tech management
+  security_team_email   = local.groups.techmgmt
+  compliance_team_email = local.groups.techmgmt 
+  ciso_email           = local.groups.techmgmt
 
   # Alert channels
   alert_notification_channels = [
@@ -29,8 +29,9 @@ module "pam_access_control" {
     # Lane 1: App Code + Manifests (30 min)
     jit-deploy = {
       eligible_principals = [
-        "group:gcp-developers@${var.domain}",
-        "group:gcp-approvers@${var.domain}"
+        "group:${local.groups.developers}",
+        "group:${local.groups.prodsupport}",
+        "group:${local.groups.techlead}"
       ]
       custom_roles = [
         "roles/clouddeploy.operator",
@@ -40,14 +41,21 @@ module "pam_access_control" {
       resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
       resource_type    = "cloudresourcemanager.googleapis.com/Organization"
       access_window    = "lane1"  # 30 minutes
-      approvers        = ["group:gcp-approvers@${var.domain}"]  # Peer approval
+      approvers        = [
+        "group:${local.groups.prodsupport}",
+        "group:${local.groups.techlead}",
+        "group:${local.groups.techmgmt}"
+      ]
       approvals_needed = 1  # Google PAM currently only supports 1
-      notification_emails = ["gcp-admins@${var.domain}"]
+      notification_emails = [local.groups.techmgmt]
     }
 
     # Lane 2: Environment Infrastructure (60 min)
     jit-tf-admin = {
-      eligible_principals = ["group:gcp-admins@${var.domain}"]  # Tech Leads/Mgmt
+      eligible_principals = [
+        "group:${local.groups.techlead}",
+        "group:${local.groups.techmgmt}"
+      ]
       custom_roles = [
         "roles/compute.admin",
         "roles/container.admin",
@@ -57,16 +65,44 @@ module "pam_access_control" {
       resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
       resource_type    = "cloudresourcemanager.googleapis.com/Organization"
       access_window    = "lane2"  # 60 minutes
-      approvers        = ["group:gcp-admins@${var.domain}"]  # Tech Lead + Tech Mgmt
-      approvals_needed = 1  # Google PAM currently only supports 1
-      notification_emails = ["gcp-admins@${var.domain}"]
+      approvers        = [
+        "group:${local.groups.techlead}",
+        "group:${local.groups.techmgmt}"
+      ]
+      approvals_needed = 1  # Google PAM currently only supports 1 (policy requires 2)
+      notification_emails = [local.groups.techmgmt]
     }
 
     # Lane 3: Org-Level Infrastructure (30 min) - handled by break-glass-emergency
 
-    # Additional standard entitlements
+    # Lane 4: Everything-as-Code Project Bootstrap (30 min)
+    jit-project-bootstrap = {
+      eligible_principals = [
+        "group:${local.groups.techlead}",
+        "group:${local.groups.techmgmt}"
+      ]
+      custom_roles = [
+        "roles/resourcemanager.projectCreator",
+        "roles/billing.projectManager",
+        "roles/iam.organizationRoleAdmin",
+        "roles/orgpolicy.policyAdmin",
+        "roles/logging.configWriter"
+      ]
+      resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
+      resource_type    = "cloudresourcemanager.googleapis.com/Organization"
+      access_window    = "lane3"  # 30 minutes (same as lane 4 in policy)
+      approvers        = ["group:${local.groups.techmgmt}"]
+      approvals_needed = 1  # Google PAM currently only supports 1 (policy requires 2)
+      notification_emails = [local.groups.techmgmt]
+    }
+
+    # Deployment approver access (for Cloud Deploy gates)
     deployment-approver-access = {
-      eligible_principals = ["group:gcp-approvers@${var.domain}"]
+      eligible_principals = [
+        "group:${local.groups.prodsupport}",
+        "group:${local.groups.techlead}",
+        "group:${local.groups.techmgmt}"
+      ]
       custom_roles = [
         "roles/clouddeploy.approver",
         "roles/clouddeploy.viewer",
@@ -76,36 +112,39 @@ module "pam_access_control" {
       resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
       resource_type    = "cloudresourcemanager.googleapis.com/Organization"
       access_window    = "normal"  # 2 hours
-      approvers        = ["group:gcp-approvers@${var.domain}"]
+      approvers        = [
+        "group:${local.groups.prodsupport}",
+        "group:${local.groups.techlead}"
+      ]
       approvals_needed = 1  # Google PAM currently only supports 1
-      notification_emails = ["gcp-admins@${var.domain}"]
+      notification_emails = [local.groups.techmgmt]
     }
 
-    # Billing access for auditors - commented out until group exists
-    # billing-access = {
-    #   eligible_principals = ["group:gcp-auditors@${var.domain}"]
-    #   custom_roles = [
-    #     "roles/billing.viewer",
-    #     "roles/billing.costsManager"
-    #   ]
-    #   resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
-    #   resource_type    = "cloudresourcemanager.googleapis.com/Organization"
-    #   access_window    = "extended"  # 4 hours for reports
-    #   approvers        = ["group:gcp-admins@${var.domain}"]
-    #   approvals_needed = 1
-    #   notification_emails = ["gcp-admins@${var.domain}"]
-    # }
+    # Billing access for finance team
+    billing-access = {
+      eligible_principals = ["group:${local.groups.billing}"]
+      custom_roles = [
+        "roles/billing.viewer",
+        "roles/billing.costsManager"
+      ]
+      resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
+      resource_type    = "cloudresourcemanager.googleapis.com/Organization"
+      access_window    = "extended"  # 4 hours for reports
+      approvers        = ["group:${local.groups.techmgmt}"]
+      approvals_needed = 1
+      notification_emails = [local.groups.techmgmt]
+    }
   }
 }
 
 # Notification channel for alerts
 resource "google_monitoring_notification_channel" "alerts_email" {
   project      = google_project.security.project_id
-  display_name = "Admin Group Alerts"
+  display_name = "Tech Management Alerts"
   type         = "email"
   
   labels = {
-    email_address = "gcp-admins@${var.domain}"
+    email_address = local.groups.techmgmt
   }
 }
 
@@ -155,21 +194,28 @@ resource "google_cloudfunctions_function" "pam_slack_notifier" {
   }
 }
 
-# Output simplified configuration
-output "simplified_pam_config" {
+# Output configuration aligned with policy v0.7
+output "pam_config_v07" {
   value = {
-    policy_version = "v0.4"
+    policy_version = "v0.7"
+    groups = {
+      developers  = local.groups.developers
+      prodsupport = local.groups.prodsupport
+      techlead    = local.groups.techlead
+      techmgmt    = local.groups.techmgmt
+      billing     = local.groups.billing
+    }
     lanes = {
       lane1 = {
         name     = "App Code + Manifests"
         ttl      = "30 minutes"
-        approval = "Dual approval from Prod Support+"
+        approval = "Prod Support+ peer approval"
         jit_role = "jit-deploy"
       }
       lane2 = {
         name     = "Environment Infrastructure"
         ttl      = "60 minutes"
-        approval = "Tech Lead + Tech Mgmt"
+        approval = "Tech Lead + Tech Mgmt (2 approvers)"
         jit_role = "jit-tf-admin"
       }
       lane3 = {
@@ -178,9 +224,15 @@ output "simplified_pam_config" {
         approval = "2 Tech Mgmt approvers"
         jit_role = "break-glass-emergency"
       }
+      lane4 = {
+        name     = "Everything-as-Code Project Bootstrap"
+        ttl      = "30 minutes"
+        approval = "2 Tech Mgmt approvers"
+        jit_role = "jit-project-bootstrap"
+      }
     }
     retention = "400 days for all audit artifacts"
-    notifications = "All alerts go to gcp-admins@${var.domain} + #audit-log"
+    notifications = "All alerts to ${local.groups.techmgmt} + #audit-log"
   }
-  description = "PAM configuration aligned with Break-Glass Policy v0.4"
+  description = "PAM configuration aligned with Break-Glass Policy v0.7"
 }
