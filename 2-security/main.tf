@@ -117,7 +117,7 @@ resource "google_bigquery_dataset" "audit_logs" {
 
   description = "Centralized audit logs for compliance and security monitoring"
 
-  default_table_expiration_ms = 7776000000  # 90 days
+  default_table_expiration_ms = 34560000000  # 400 days per policy
   
   default_encryption_configuration {
     kms_key_name = google_kms_crypto_key.audit_logs_key.id

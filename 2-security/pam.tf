@@ -1,5 +1,5 @@
 # Simplified PAM Configuration for Small Company
-# This replaces the complex pam.tf with a streamlined version
+# Aligned with GCP Break-Glass Policy v0.4
 
 module "pam_access_control" {
   source = "../../terraform-google-compliance-modules/modules/pam-access-control"
@@ -12,7 +12,7 @@ module "pam_access_control" {
 
   # Simplified group structure
   failsafe_account           = var.failsafe_account
-  emergency_responders_group = "gcp-admins@${var.domain}"  # Combined admin group
+  emergency_responders_group = "gcp-admins@${var.domain}"  # Tech Mgmt group
   
   # Notification emails - send to admin group
   security_team_email   = "gcp-admins@${var.domain}"
@@ -22,26 +22,49 @@ module "pam_access_control" {
   # Alert channels
   alert_notification_channels = [
     google_monitoring_notification_channel.alerts_email.id,
-    # Add Slack when ready: google_monitoring_notification_channel.alerts_slack.id
   ]
 
-  # Simplified PAM entitlements for small company
+  # PAM entitlements aligned with policy lanes
   standard_entitlements = {
-    # 1. Admin elevation - for infrastructure changes
-    admin-elevation = {
-      eligible_principals = ["group:gcp-admins@${var.domain}"]
+    # Lane 1: App Code + Manifests (30 min)
+    jit-deploy = {
+      eligible_principals = [
+        "group:gcp-developers@${var.domain}",
+        "group:gcp-approvers@${var.domain}"
+      ]
       custom_roles = [
-        "roles/admin"  # Full admin access (owner not supported in PAM)
+        "roles/clouddeploy.operator",
+        "roles/container.developer",
+        "roles/logging.viewer"
       ]
       resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
       resource_type    = "cloudresourcemanager.googleapis.com/Organization"
-      access_window    = "normal"  # 2 hours
-      approvers        = ["group:gcp-admins@${var.domain}"]  # Peer approval within admin group
-      approvals_needed = 1
+      access_window    = "lane1"  # 30 minutes
+      approvers        = ["group:gcp-approvers@${var.domain}"]  # Peer approval
+      approvals_needed = 2  # Dual approval per policy
       notification_emails = ["gcp-admins@${var.domain}"]
     }
 
-    # 2. Deployment approval elevation - for approvers who need temporary access
+    # Lane 2: Environment Infrastructure (60 min)
+    jit-tf-admin = {
+      eligible_principals = ["group:gcp-admins@${var.domain}"]  # Tech Leads/Mgmt
+      custom_roles = [
+        "roles/compute.admin",
+        "roles/container.admin",
+        "roles/iam.serviceAccountAdmin",
+        "roles/storage.admin"
+      ]
+      resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
+      resource_type    = "cloudresourcemanager.googleapis.com/Organization"
+      access_window    = "lane2"  # 60 minutes
+      approvers        = ["group:gcp-admins@${var.domain}"]  # Tech Lead + Tech Mgmt
+      approvals_needed = 2  # Dual approval
+      notification_emails = ["gcp-admins@${var.domain}"]
+    }
+
+    # Lane 3: Org-Level Infrastructure (30 min) - handled by break-glass-emergency
+
+    # Additional standard entitlements
     deployment-approver-access = {
       eligible_principals = ["group:gcp-approvers@${var.domain}"]
       custom_roles = [
@@ -53,32 +76,12 @@ module "pam_access_control" {
       resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
       resource_type    = "cloudresourcemanager.googleapis.com/Organization"
       access_window    = "normal"  # 2 hours
-      approvers        = ["group:gcp-approvers@${var.domain}"]  # Self-approval within approvers
-      approvals_needed = 1  # Google requires at least 1, but approvers can self-approve
-    }
-
-    # 3. Developer production access - for deployments and debugging
-    developer-prod-access = {
-      eligible_principals = [
-        "group:gcp-developers@${var.domain}",
-        "group:gcp-admins@${var.domain}"  # Admins can also use this
-      ]
-      custom_roles = [
-        "roles/compute.admin",
-        "roles/container.admin",
-        "roles/clouddeploy.operator",
-        "roles/logging.viewer",
-        "roles/monitoring.editor"
-      ]
-      resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
-      resource_type    = "cloudresourcemanager.googleapis.com/Organization"
-      access_window    = "normal"  # 2 hours
-      approvers        = ["group:gcp-admins@${var.domain}"]
-      approvals_needed = 1
+      approvers        = ["group:gcp-approvers@${var.domain}"]
+      approvals_needed = 2  # No self-approval
       notification_emails = ["gcp-admins@${var.domain}"]
     }
 
-    # 4. Billing access - for finance team if needed
+    # Billing access for auditors
     billing-access = {
       eligible_principals = ["group:gcp-auditors@${var.domain}"]
       custom_roles = [
@@ -92,28 +95,10 @@ module "pam_access_control" {
       approvals_needed = 1
       notification_emails = ["gcp-admins@${var.domain}"]
     }
-
-    # 5. Service account elevation - for CI/CD automation
-    cicd-automation = {
-      eligible_principals = [
-        "serviceAccount:github-actions@${google_project.security.project_id}.iam.gserviceaccount.com"
-      ]
-      custom_roles = [
-        "roles/resourcemanager.projectIamAdmin",
-        "roles/iam.serviceAccountAdmin",
-        "roles/clouddeploy.admin"
-      ]
-      resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
-      resource_type    = "cloudresourcemanager.googleapis.com/Organization"
-      access_window    = "emergency"  # 1 hour - using emergency window for automation
-      approvers        = ["serviceAccount:github-actions@${google_project.security.project_id}.iam.gserviceaccount.com"]
-      approvals_needed = 1  # Google requires at least 1, service account can self-approve
-      notification_emails = ["gcp-admins@${var.domain}"]
-    }
   }
 }
 
-# Simplified notification channel - just email to start
+# Notification channel for alerts
 resource "google_monitoring_notification_channel" "alerts_email" {
   project      = google_project.security.project_id
   display_name = "Admin Group Alerts"
@@ -124,28 +109,76 @@ resource "google_monitoring_notification_channel" "alerts_email" {
   }
 }
 
+# Cloud Function for Slack integration
+resource "google_storage_bucket" "cloud_functions" {
+  name     = "${var.org_prefix}-pam-slack-functions"
+  location = var.primary_region
+  project  = google_project.security.project_id
+
+  uniform_bucket_level_access = true
+  force_destroy              = false
+}
+
+resource "google_storage_bucket_object" "pam_slack_function" {
+  name   = "pam-slack-notifier.zip"
+  bucket = google_storage_bucket.cloud_functions.name
+  source = "${path.module}/functions/pam-slack-notifier.zip"
+}
+
+resource "google_pubsub_topic" "pam_events" {
+  name    = "pam-audit-events"
+  project = google_project.security.project_id
+}
+
+resource "google_cloudfunctions_function" "pam_slack_notifier" {
+  name        = "pam-slack-notifier"
+  description = "Posts PAM events to #audit-log Slack channel"
+  runtime     = "nodejs18"
+  project     = google_project.security.project_id
+  region      = var.primary_region
+
+  available_memory_mb   = 256
+  source_archive_bucket = google_storage_bucket.cloud_functions.name
+  source_archive_object = google_storage_bucket_object.pam_slack_function.name
+  entry_point          = "handlePamEvent"
+
+  event_trigger {
+    event_type = "google.pubsub.topic.publish"
+    resource   = google_pubsub_topic.pam_events.name
+  }
+
+  environment_variables = {
+    SLACK_WEBHOOK_URL = var.slack_webhook_url
+    SLACK_CHANNEL     = "#audit-log"
+  }
+}
+
 # Output simplified configuration
 output "simplified_pam_config" {
   value = {
-    groups = {
-      admins     = "gcp-admins@${var.domain}"
-      approvers  = "gcp-approvers@${var.domain}"
-      developers = "gcp-developers@${var.domain}"
-      auditors   = "gcp-auditors@${var.domain}"
+    policy_version = "v0.4"
+    lanes = {
+      lane1 = {
+        name     = "App Code + Manifests"
+        ttl      = "30 minutes"
+        approval = "Dual approval from Prod Support+"
+        jit_role = "jit-deploy"
+      }
+      lane2 = {
+        name     = "Environment Infrastructure"
+        ttl      = "60 minutes"
+        approval = "Tech Lead + Tech Mgmt"
+        jit_role = "jit-tf-admin"
+      }
+      lane3 = {
+        name     = "Org-Level Infrastructure"
+        ttl      = "30 minutes"
+        approval = "2 Tech Mgmt approvers"
+        jit_role = "break-glass-emergency"
+      }
     }
-    break_glass = {
-      who      = "gcp-admins@${var.domain} + failsafe account"
-      duration = "1 hour"
-      approval = "Self-approval for emergencies"
-    }
-    standard_access = {
-      admin-elevation           = "2 hours with peer approval"
-      deployment-approver-access = "2 hours with self-approval"
-      developer-prod-access     = "2 hours with admin approval"
-      billing-access            = "4 hours with admin approval"
-      cicd-automation          = "30 minutes auto-approved"
-    }
-    notifications = "All alerts go to gcp-admins@${var.domain}"
+    retention = "400 days for all audit artifacts"
+    notifications = "All alerts go to gcp-admins@${var.domain} + #audit-log"
   }
-  description = "Simplified PAM configuration for small company"
+  description = "PAM configuration aligned with Break-Glass Policy v0.4"
 }

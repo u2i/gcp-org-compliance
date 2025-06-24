@@ -1,0 +1,17 @@
+{
+  "name": "pam-slack-notifier",
+  "version": "1.0.0",
+  "description": "Cloud Function to post PAM events to Slack audit channel",
+  "main": "index.js",
+  "engines": {
+    "node": "18"
+  },
+  "dependencies": {
+    "@google-cloud/pubsub": "^3.7.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "U2i Security Team",
+  "license": "UNLICENSED"
+}
