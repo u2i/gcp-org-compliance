@@ -41,7 +41,7 @@ module "pam_access_control" {
       resource_type    = "cloudresourcemanager.googleapis.com/Organization"
       access_window    = "lane1"  # 30 minutes
       approvers        = ["group:gcp-approvers@${var.domain}"]  # Peer approval
-      approvals_needed = 2  # Dual approval per policy
+      approvals_needed = 1  # Google PAM currently only supports 1
       notification_emails = ["gcp-admins@${var.domain}"]
     }
 
@@ -58,7 +58,7 @@ module "pam_access_control" {
       resource_type    = "cloudresourcemanager.googleapis.com/Organization"
       access_window    = "lane2"  # 60 minutes
       approvers        = ["group:gcp-admins@${var.domain}"]  # Tech Lead + Tech Mgmt
-      approvals_needed = 2  # Dual approval
+      approvals_needed = 1  # Google PAM currently only supports 1
       notification_emails = ["gcp-admins@${var.domain}"]
     }
 
@@ -77,24 +77,24 @@ module "pam_access_control" {
       resource_type    = "cloudresourcemanager.googleapis.com/Organization"
       access_window    = "normal"  # 2 hours
       approvers        = ["group:gcp-approvers@${var.domain}"]
-      approvals_needed = 2  # No self-approval
+      approvals_needed = 1  # Google PAM currently only supports 1
       notification_emails = ["gcp-admins@${var.domain}"]
     }
 
-    # Billing access for auditors
-    billing-access = {
-      eligible_principals = ["group:gcp-auditors@${var.domain}"]
-      custom_roles = [
-        "roles/billing.viewer",
-        "roles/billing.costsManager"
-      ]
-      resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
-      resource_type    = "cloudresourcemanager.googleapis.com/Organization"
-      access_window    = "extended"  # 4 hours for reports
-      approvers        = ["group:gcp-admins@${var.domain}"]
-      approvals_needed = 1
-      notification_emails = ["gcp-admins@${var.domain}"]
-    }
+    # Billing access for auditors - commented out until group exists
+    # billing-access = {
+    #   eligible_principals = ["group:gcp-auditors@${var.domain}"]
+    #   custom_roles = [
+    #     "roles/billing.viewer",
+    #     "roles/billing.costsManager"
+    #   ]
+    #   resource         = "//cloudresourcemanager.googleapis.com/organizations/${var.org_id}"
+    #   resource_type    = "cloudresourcemanager.googleapis.com/Organization"
+    #   access_window    = "extended"  # 4 hours for reports
+    #   approvers        = ["group:gcp-admins@${var.domain}"]
+    #   approvals_needed = 1
+    #   notification_emails = ["gcp-admins@${var.domain}"]
+    # }
   }
 }
 
@@ -136,6 +136,8 @@ resource "google_cloudfunctions_function" "pam_slack_notifier" {
   runtime     = "nodejs18"
   project     = google_project.security.project_id
   region      = var.primary_region
+  
+  depends_on = [google_project_service.security_apis["cloudfunctions.googleapis.com"]]
 
   available_memory_mb   = 256
   source_archive_bucket = google_storage_bucket.cloud_functions.name

@@ -87,7 +87,11 @@ resource "google_project_service" "security_apis" {
     "bigquery.googleapis.com",
     "cloudasset.googleapis.com",
     "securitycenter.googleapis.com",
-    "cloudkms.googleapis.com"
+    "cloudkms.googleapis.com",
+    "cloudfunctions.googleapis.com",
+    "pubsub.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "cloudbuild.googleapis.com"
   ])
 
   project = google_project.security.project_id
@@ -130,7 +134,7 @@ resource "google_bigquery_dataset" "audit_logs" {
 
   access {
     role          = "READER"
-    group_by_email = "gcp-security-analysts@${var.domain}"
+    group_by_email = "gcp-admins@${var.domain}"
   }
 
   labels = {
@@ -158,6 +162,13 @@ resource "google_kms_crypto_key" "audit_logs_key" {
   lifecycle {
     prevent_destroy = true
   }
+}
+
+# Grant BigQuery service account permission to use the encryption key
+resource "google_kms_crypto_key_iam_member" "bigquery_encryption" {
+  crypto_key_id = google_kms_crypto_key.audit_logs_key.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:bq-379812091446@bigquery-encryption.iam.gserviceaccount.com"
 }
 
 # Service account for GitHub Actions CI/CD
