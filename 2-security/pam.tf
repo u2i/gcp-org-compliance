@@ -158,10 +158,32 @@ resource "google_storage_bucket" "cloud_functions" {
   force_destroy              = false
 }
 
+# Install npm dependencies before creating the archive
+resource "null_resource" "pam_slack_npm_install" {
+  triggers = {
+    package_json = filemd5("${path.module}/functions/pam-slack-notifier/package.json")
+    index_js     = filemd5("${path.module}/functions/pam-slack-notifier/index.js")
+  }
+
+  provisioner "local-exec" {
+    command     = "npm install"
+    working_dir = "${path.module}/functions/pam-slack-notifier"
+  }
+}
+
+# Create ZIP archive of the function code
+data "archive_file" "pam_slack_function" {
+  type        = "zip"
+  source_dir  = "${path.module}/functions/pam-slack-notifier"
+  output_path = "${path.module}/.terraform/tmp/pam-slack-notifier.zip"
+  
+  depends_on = [null_resource.pam_slack_npm_install]
+}
+
 resource "google_storage_bucket_object" "pam_slack_function" {
-  name   = "pam-slack-notifier.zip"
+  name   = "pam-slack-notifier-${data.archive_file.pam_slack_function.output_md5}.zip"
   bucket = google_storage_bucket.cloud_functions.name
-  source = "${path.module}/functions/pam-slack-notifier.zip"
+  source = data.archive_file.pam_slack_function.output_path
 }
 
 resource "google_pubsub_topic" "pam_events" {
