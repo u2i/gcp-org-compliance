@@ -5,3 +5,6 @@
 !*.tfvars.example
 .terraform.lock.hcl
 .DS_Store
+node_modules/
+*.zip
+2-security/functions/*/node_modules/

@@ -191,7 +191,7 @@ resource "google_organization_iam_member" "developers_org_permissions" {
   member = "group:${var.developers_group}"
 }
 
-# Developers can edit in non-production folders
+# Developers can edit in nonproduction folders
 resource "google_folder_iam_member" "developers_folder_permissions" {
   for_each = {
     "legacy-edit"    = { folder = module.org_structure.folder_ids["legacy-systems"], role = "roles/editor" }
