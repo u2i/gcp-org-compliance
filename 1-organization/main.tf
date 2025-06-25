@@ -52,7 +52,7 @@ module "org_structure" {
 
 # Security policies with exceptions for legacy
 module "security_baseline" {
-  source = "github.com/u2i/terraform-google-compliance-modules//modules/security-baseline?ref=v1.5.0"
+  source = "github.com/u2i/terraform-google-compliance-modules//modules/security-baseline?ref=v1.8.0"
 
   parent_id  = var.org_id
   policy_for = "organization"
@@ -206,3 +206,14 @@ resource "google_folder_iam_member" "developers_folder_permissions" {
 
 # Note: Approvers group permissions are configured in PAM module
 # They inherit all developer permissions plus PAM approval rights
+
+# Cloud Deploy org policy to disable automatic label generation
+# This prevents Cloud Deploy from adding labels with dots that break Certificate Manager
+resource "google_organization_policy" "disable_cloud_deploy_labels" {
+  org_id     = var.org_id
+  constraint = "constraints/clouddeploy.disableServiceLabelGeneration"
+
+  boolean_policy {
+    enforced = true
+  }
+}
