@@ -87,7 +87,6 @@ resource "google_project_service" "security_apis" {
     "bigquery.googleapis.com",
     "cloudasset.googleapis.com",
     "securitycenter.googleapis.com",
-    "cloudkms.googleapis.com",
     "cloudfunctions.googleapis.com",
     "pubsub.googleapis.com",
     "artifactregistry.googleapis.com",
@@ -123,10 +122,6 @@ resource "google_bigquery_dataset" "audit_logs" {
   description = "Centralized audit logs for compliance and security monitoring"
 
   default_table_expiration_ms = 34560000000  # 400 days per policy
-  
-  default_encryption_configuration {
-    kms_key_name = google_kms_crypto_key.audit_logs_key.id
-  }
 
   access {
     role          = "OWNER"
@@ -148,33 +143,6 @@ resource "google_bigquery_dataset" "audit_logs" {
     data_residency = "eu"
     purpose        = "audit-logs"
   }
-}
-
-# KMS keyring for security resources
-resource "google_kms_key_ring" "security" {
-  project  = google_project.security.project_id
-  name     = "security-keyring"
-  location = var.primary_region
-}
-
-# KMS key for audit logs encryption
-resource "google_kms_crypto_key" "audit_logs_key" {
-  name     = "audit-logs-key"
-  key_ring = google_kms_key_ring.security.id
-  purpose  = "ENCRYPT_DECRYPT"
-
-  rotation_period = "7776000s"  # 90 days
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-# Grant BigQuery service account permission to use the encryption key
-resource "google_kms_crypto_key_iam_member" "bigquery_encryption" {
-  crypto_key_id = google_kms_crypto_key.audit_logs_key.id
-  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:bq-379812091446@bigquery-encryption.iam.gserviceaccount.com"
 }
 
 # Service account for GitHub Actions CI/CD

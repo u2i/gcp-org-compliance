@@ -8,7 +8,6 @@ The security phase provides:
 - **PAM (Privileged Access Manager)** - Just-in-time access with proper approvals
 - **Centralized Audit Logging** - All security events logged to BigQuery
 - **Security Monitoring** - Real-time alerts for critical events
-- **KMS Encryption** - At-rest encryption for sensitive data
 
 ## JIT Access Implementation
 

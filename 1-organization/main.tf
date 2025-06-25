@@ -73,7 +73,6 @@ module "security_baseline" {
     disable_serial_port_access = true
     skip_default_network       = true
     vm_external_ip_access      = true
-    require_cmek_encryption    = true
 
     # Advanced policies - compliant systems only (migration gets exceptions)
     require_os_login     = true  # OS Login required for compliant systems
@@ -112,7 +111,6 @@ module "security_baseline" {
         # Storage & Encryption
         "uniform_bucket_level_access",
         "public_access_prevention", 
-        "require_cmek_encryption",
         # Database
         "require_ssl_sql",
         "restrict_public_sql",
@@ -172,7 +170,6 @@ module "audit_logging" {
     }
   }
 
-  enable_cmek = false # Enable after KMS setup
 }
 
 # Configure group permissions (simplified for small org)

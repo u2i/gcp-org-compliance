@@ -43,7 +43,6 @@ resource "google_project_service" "bootstrap_apis" {
     "iam.googleapis.com",
     "storage.googleapis.com",
     "serviceusage.googleapis.com",
-    "cloudkms.googleapis.com",
     "cloudasset.googleapis.com",
     "logging.googleapis.com",
     "pubsub.googleapis.com",
