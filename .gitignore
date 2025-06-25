@@ -4,4 +4,7 @@
 *.tfvars
 !*.tfvars.example
 .terraform.lock.hcl
-.DS_Store2-security/functions/pam-slack-notifier/node_modules/
+.DS_Store
+node_modules/
+*.zip
+2-security/functions/*/node_modules/
